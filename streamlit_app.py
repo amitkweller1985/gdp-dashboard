@@ -1,4 +1,4 @@
-import streamlit as st
+ort streamlit as st
 import pandas as pd
 from datetime import date, timedelta
 
@@ -335,42 +335,28 @@ if len(consumer):
     )
 
     total = float(cats["סכום"].sum())
-    max_amount = float(cats["סכום"].max())
 
     for _, row in cats.iterrows():
         category = str(row["קטגוריה"])
         amount = float(row["סכום"])
         percent = (amount / total * 100) if total else 0
-        bar_percent = (amount / max_amount * 100) if max_amount else 0
-        color = CATEGORY_COLORS.get(category, "#778CA3")
 
-        st.markdown(
-            f"""
-            <div class="expense-card">
-                <div style="
-                    display:flex;
-                    justify-content:space-between;
-                    align-items:center;
-                    gap:20px;">
-                    <div class="expense-title">{category}</div>
-                    <div class="expense-amount">₪{amount:,.0f}</div>
-                </div>
+        col_name, col_amount, col_percent = st.columns([3, 2, 2])
 
-                <div class="expense-percent">
-                    {percent:.1f}% מהוצאות האשראי
-                </div>
+        with col_name:
+            st.markdown(f"### {category}")
 
-                <div class="expense-track">
-                    <div class="expense-fill"
-                         style="width:{bar_percent:.1f}%; background-color:{color};">
-                    </div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        with col_amount:
+            st.markdown(f"### ₪{amount:,.0f}")
+
+        with col_percent:
+            st.markdown(f"**{percent:.1f}% מההוצאות**")
+
+        st.progress(min(percent / 100, 1.0))
+        st.divider()
 
     st.subheader("פירוט עסקאות")
+
     view = consumer[
         ["תאריך", "בית עסק", "סכום", "קטגוריה"]
     ].sort_values("תאריך", ascending=False).copy()
@@ -383,10 +369,7 @@ if len(consumer):
         hide_index=True,
         column_config={
             "בית עסק": st.column_config.TextColumn("בית עסק"),
-            "סכום": st.column_config.NumberColumn(
-                "סכום",
-                format="₪ %.2f",
-            ),
+            "סכום": st.column_config.NumberColumn("סכום", format="₪ %.2f"),
             "קטגוריה": st.column_config.TextColumn("קטגוריה"),
         },
     )
