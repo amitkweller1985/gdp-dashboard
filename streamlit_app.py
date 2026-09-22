@@ -1,151 +1,144 @@
 import streamlit as st
 import pandas as pd
-import math
-from pathlib import Path
+import re
+from datetime import date, datetime, timedelta
 
-# Set the title and favicon that appear in the Browser's tab bar.
-st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
-)
+st.set_page_config(page_title="התקציב שלי", page_icon="💰", layout="wide")
+st.markdown("""
+<style>
+html, body, [class*="css"] { direction: rtl; text-align: right; }
+[data-testid="stMetric"] { direction: rtl; }
+.block-container { max-width: 1100px; }
+</style>
+""", unsafe_allow_html=True)
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
+DEFAULTS = {
+    "income": 28500.0,
+    "mortgage": 9800.0,
+    "kindergarten": 4000.0,
+    "savings_goal": 2000.0,
+    "cycle_day": 10,
+}
 
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+def cycle_bounds(today, d=10):
+    if today.day >= d:
+        start = date(today.year, today.month, d)
+        nxt = date(today.year + 1, 1, d) if today.month == 12 else date(today.year, today.month + 1, d)
+    else:
+        start = date(today.year - 1, 12, d) if today.month == 1 else date(today.year, today.month - 1, d)
+        nxt = date(today.year, today.month, d)
+    return start, nxt - timedelta(days=1)
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
+def find_col(cols, wanted):
+    return next((c for c in cols if str(c).strip() == wanted), None)
 
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
+def auto_category(merchant):
+    s = str(merchant or "").lower()
+    rules = [
+        (["עגול לחס"], "חיסכון"),
+        (["שופרסל","רמי לוי","ויקטורי","קרפור","סופר","כל - בו","כל-בו"], "מזון וסופר"),
+        (["פנגו","סלופארק","דלק","סונול","פז","דור אלון","כביש 6"], "רכב ותחבורה"),
+        (["עיריית"], "דיור/עירייה"),
+        (["מכבי חיפה","סינמה","יס פלאנט"], "בילויים"),
+        (["בזק","פרטנר","סלקום","הוט","נטפליקס","spotify","apple"], "תקשורת ומנויים"),
+        (["סופר-פארם","סופר פארם","בית מרקחת"], "בריאות"),
+        (["מסעד","קפה","ארומה","מקדונלד","וולט","תן ביס"], "מסעדות"),
+    ]
+    for keys, cat in rules:
+        if any(k.lower() in s for k in keys):
+            return cat
+    return "אחר"
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
+def parse_file(upload):
+    df = pd.read_excel(upload)
+    merchant = find_col(df.columns, "בית עסק")
+    txdate = find_col(df.columns, "תאריך עסקה")
+    amount = find_col(df.columns, "סכום החיוב")
+    if not all([merchant, txdate, amount]):
+        raise ValueError("לא זוהה פורמט הקובץ. נדרשות העמודות: בית עסק, תאריך עסקה, סכום החיוב.")
+    out = pd.DataFrame()
+    out["בית עסק"] = df[merchant].astype(str).str.strip()
+    out["תאריך"] = pd.to_datetime(df[txdate], errors="coerce", dayfirst=True)
+    out["סכום"] = pd.to_numeric(df[amount], errors="coerce")
+    out = out.dropna(subset=["תאריך","סכום"])
+    out = out[(out["בית עסק"] != "בית עסק") & (out["בית עסק"] != "nan")]
+    out["קטגוריה"] = out["בית עסק"].map(auto_category)
+    # Remove exact duplicate rows inside the uploaded export.
+    out = out.drop_duplicates(subset=["בית עסק","תאריך","סכום"])
+    return out
 
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
+st.title("💰 התקציב שלי")
+st.caption("גרסת Web פשוטה: מעלים את קובץ האשראי העדכני ומקבלים מיד תמונת מצב למחזור 10–10.")
 
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
+with st.sidebar:
+    st.header("הגדרות חודשיות")
+    income = st.number_input("הכנסות", min_value=0.0, value=DEFAULTS["income"], step=100.0)
+    mortgage = st.number_input("משכנתא", min_value=0.0, value=DEFAULTS["mortgage"], step=100.0)
+    kindergarten = st.number_input("גן / צ׳קים", min_value=0.0, value=DEFAULTS["kindergarten"], step=100.0)
+    savings_goal = st.number_input("יעד חיסכון", min_value=0.0, value=DEFAULTS["savings_goal"], step=100.0)
+    st.info("המחזור מוגדר מה־10 בחודש עד ה־9 בחודש הבא.")
 
-    return gdp_df
+today = date.today()
+start, end = cycle_bounds(today, 10)
+available = income - mortgage - kindergarten - savings_goal
 
-gdp_df = get_gdp_data()
+st.subheader(f"מחזור נוכחי: {start:%d/%m/%Y}–{end:%d/%m/%Y}")
+st.write(f"מסגרת לשאר ההוצאות אחרי משכנתא, גן ויעד חיסכון: **₪{available:,.0f}**")
 
-# -----------------------------------------------------------------------------
-# Draw the actual page
+upload = st.file_uploader("העלה את קובץ האשראי העדכני", type=["xlsx","xls"])
 
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
+if upload is None:
+    st.info("בחר קובץ Excel. האפליקציה מנתחת אותו בזיכרון לצורך החישוב; גרסה זו אינה זקוקה למסד נתונים.")
+    st.stop()
 
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
+try:
+    df = parse_file(upload)
+except Exception as e:
+    st.error(str(e))
+    st.stop()
 
-# Add some spacing
-''
-''
+cyc = df[(df["תאריך"].dt.date >= start) & (df["תאריך"].dt.date <= end)].copy()
+consumer = cyc[cyc["קטגוריה"] != "חיסכון"].copy()
+round_savings = cyc[cyc["קטגוריה"] == "חיסכון"]["סכום"].sum()
+spend = consumer["סכום"].sum()
+remaining = available - spend
+days_left = max((end - today).days + 1, 1)
+daily = max(remaining / days_left, 0)
+elapsed = max((today - start).days + 1, 1)
+pace = spend / elapsed
+projected_spend = spend + pace * max((end - today).days, 0)
+projected_saving = income - mortgage - kindergarten - projected_spend
 
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
+if projected_saving >= savings_goal:
+    status, msg = "🟢 ירוק", f"בקצב הנוכחי יעד החיסכון של ₪{savings_goal:,.0f} נשמר."
+elif projected_saving >= 0:
+    status, msg = "🟠 כתום", f"כדאי להאט. נסה להישאר סביב ₪{daily:,.0f} ליום עד סוף המחזור."
+else:
+    status, msg = "🔴 אדום", "כדאי לעצור הוצאות לא חיוניות ולבחון את הקטגוריות הגדולות."
 
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
+st.header(status)
+c1,c2,c3,c4 = st.columns(4)
+c1.metric("נשאר להוציא", f"₪{remaining:,.0f}")
+c2.metric("מותר ליום", f"₪{daily:,.0f}")
+c3.metric("הוצאות אשראי", f"₪{spend:,.0f}")
+c4.metric("תחזית חיסכון", f"₪{projected_saving:,.0f}")
 
-countries = gdp_df['Country Code'].unique()
+if status.startswith("🟢"): st.success(msg)
+elif status.startswith("🟠"): st.warning(msg)
+else: st.error(msg)
 
-if not len(countries):
-    st.warning("Select at least one country")
+st.divider()
+st.subheader("הוצאות לפי קטגוריה")
+if len(consumer):
+    cats = consumer.groupby("קטגוריה", as_index=False)["סכום"].sum().sort_values("סכום", ascending=False)
+    st.bar_chart(cats.set_index("קטגוריה"))
+    view = consumer[["תאריך","בית עסק","סכום","קטגוריה"]].sort_values("תאריך", ascending=False)
+    view["תאריך"] = view["תאריך"].dt.strftime("%d/%m/%Y")
+    st.dataframe(view, use_container_width=True, hide_index=True)
+else:
+    st.info("לא נמצאו עסקאות אשראי במחזור הנוכחי.")
 
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
+if round_savings:
+    st.caption(f"'עגול לחיסכון' שזוהה במחזור: ₪{round_savings:,.2f}")
 
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
-
-st.header('GDP over time', divider='gray')
-
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
-
-''
-''
-
-
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
-
-st.header(f'GDP in {to_year}', divider='gray')
-
-''
-
-cols = st.columns(4)
-
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
-
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
-
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+st.caption("הערה: התחזית מבוססת על קצב ההוצאה עד היום ואינה התחייבות לתוצאה בפועל.")
