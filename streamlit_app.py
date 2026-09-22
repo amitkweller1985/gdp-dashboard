@@ -1,4 +1,4 @@
-ort streamlit as st
+import streamlit as st
 import pandas as pd
 from datetime import date, timedelta
 
@@ -15,39 +15,6 @@ html, body, [class*="css"] {
 }
 .block-container {
     max-width: 1100px;
-}
-.expense-card {
-    background-color: rgba(120,120,120,0.07);
-    padding: 16px 20px;
-    margin-bottom: 12px;
-    border-radius: 12px;
-    direction: rtl;
-}
-.expense-title {
-    font-size: 20px;
-    font-weight: 800;
-}
-.expense-amount {
-    font-size: 22px;
-    font-weight: 800;
-}
-.expense-percent {
-    font-size: 15px;
-    font-weight: 700;
-    opacity: 0.8;
-    margin-top: 4px;
-}
-.expense-track {
-    width: 100%;
-    height: 16px;
-    background-color: rgba(120,120,120,0.15);
-    border-radius: 8px;
-    overflow: hidden;
-    margin-top: 10px;
-}
-.expense-fill {
-    height: 16px;
-    border-radius: 8px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -75,20 +42,6 @@ CATEGORIES = [
     "אחר",
 ]
 
-CATEGORY_COLORS = {
-    "מזון וסופר": "#2E86DE",
-    "מסעדות ואוכל בחוץ": "#FF9F43",
-    "רכב ודלק": "#576574",
-    "חניה וכבישי אגרה": "#8395A7",
-    "ילדים וגן": "#EE5253",
-    "בריאות ופארם": "#10AC84",
-    "חשבונות ותקשורת": "#5F27CD",
-    "קניות": "#F368E0",
-    "בילויים": "#00D2D3",
-    "דיור/עירייה": "#8854D0",
-    "חיסכון": "#1DD1A1",
-    "אחר": "#778CA3",
-}
 
 def cycle_bounds(today, d=10):
     if today.day >= d:
@@ -336,26 +289,25 @@ if len(consumer):
 
     total = float(cats["סכום"].sum())
 
+    # תצוגה פשוטה ויציבה: ללא Altair וללא HTML.
     for _, row in cats.iterrows():
         category = str(row["קטגוריה"])
         amount = float(row["סכום"])
-        percent = (amount / total * 100) if total else 0
+        percent = (amount / total * 100) if total else 0.0
 
-        col_name, col_amount, col_percent = st.columns([3, 2, 2])
+        left, middle, right = st.columns([4, 2, 2])
 
-        with col_name:
-            st.markdown(f"### {category}")
+        with left:
+            st.markdown(f"**{category}**")
+        with middle:
+            st.markdown(f"**₪{amount:,.0f}**")
+        with right:
+            st.markdown(f"**{percent:.1f}%**")
 
-        with col_amount:
-            st.markdown(f"### ₪{amount:,.0f}")
+        st.progress(float(min(max(percent / 100.0, 0.0), 1.0)))
 
-        with col_percent:
-            st.markdown(f"**{percent:.1f}% מההוצאות**")
-
-        st.progress(min(percent / 100, 1.0))
-        st.divider()
-
-    st.subheader("פירוט עסקאות")
+    st.divider()
+    st.subheader("📋 פירוט עסקאות")
 
     view = consumer[
         ["תאריך", "בית עסק", "סכום", "קטגוריה"]
@@ -368,6 +320,7 @@ if len(consumer):
         use_container_width=True,
         hide_index=True,
         column_config={
+            "תאריך": st.column_config.TextColumn("תאריך"),
             "בית עסק": st.column_config.TextColumn("בית עסק"),
             "סכום": st.column_config.NumberColumn("סכום", format="₪ %.2f"),
             "קטגוריה": st.column_config.TextColumn("קטגוריה"),
