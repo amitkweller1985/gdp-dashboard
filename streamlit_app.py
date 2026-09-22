@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import date, timedelta
+import altair as alt
 
 st.set_page_config(page_title="התקציב שלי", page_icon="💰", layout="wide")
 st.markdown("""<style>
@@ -31,6 +32,21 @@ CATEGORIES = [
     "חיסכון",
     "אחר",
 ]
+
+CATEGORY_COLORS = {
+    "מזון וסופר": "#2E86DE",
+    "מסעדות ואוכל בחוץ": "#FF8C42",
+    "רכב ודלק": "#16A085",
+    "חניה וכבישי אגרה": "#8E44AD",
+    "ילדים וגן": "#E056FD",
+    "בריאות ופארם": "#E74C3C",
+    "חשבונות ותקשורת": "#3498DB",
+    "קניות": "#F1C40F",
+    "בילויים": "#9B59B6",
+    "דיור/עירייה": "#795548",
+    "חיסכון": "#27AE60",
+    "אחר": "#7F8C8D",
+}
 
 def cycle_bounds(today, d=10):
     if today.day >= d:
@@ -132,15 +148,10 @@ if len(cyc):
             "תאריך": st.column_config.DateColumn("תאריך", format="DD/MM/YYYY"),
             "בית עסק": st.column_config.TextColumn("בית עסק"),
             "סכום": st.column_config.NumberColumn("סכום", format="₪ %.2f"),
-            "קטגוריה": st.column_config.SelectboxColumn(
-                "קטגוריה",
-                options=CATEGORIES,
-                required=True,
-            ),
+            "קטגוריה": st.column_config.SelectboxColumn("קטגוריה", options=CATEGORIES, required=True),
         },
         key="category_editor",
     )
-
     cyc["קטגוריה"] = edited["קטגוריה"].values
 else:
     st.info("לא נמצאו עסקאות במחזור הנוכחי.")
@@ -176,34 +187,20 @@ days_remaining = max((end - today).days + 1, 0)
 today_budget = max(daily, 0)
 
 c1, c2, c3, c4 = st.columns(4)
-c1.metric(
-    "💳 הוצאת עד עכשיו",
-    f"₪{spend:,.0f}",
-)
+c1.metric("💳 הוצאת עד עכשיו", f"₪{spend:,.0f}")
 c2.metric(
     "💰 נשאר עד סוף המחזור",
     f"₪{max(remaining, 0):,.0f}",
     delta=f"חריגה ₪{abs(remaining):,.0f}" if remaining < 0 else None,
     delta_color="inverse",
 )
-c3.metric(
-    "📅 ימים שנותרו",
-    f"{days_remaining}",
-)
-c4.metric(
-    "🎯 מותר להוציא היום",
-    f"₪{today_budget:,.0f}",
-)
+c3.metric("📅 ימים שנותרו", f"{days_remaining}")
+c4.metric("🎯 מותר להוציא היום", f"₪{today_budget:,.0f}")
 
 st.markdown(
     f"""
-    <div style="
-        padding:18px;
-        border-radius:14px;
-        margin-top:12px;
-        margin-bottom:14px;
-        background:rgba(120,120,120,0.08);
-        font-size:18px;">
+    <div style="padding:18px;border-radius:14px;margin-top:12px;margin-bottom:14px;
+        background:rgba(120,120,120,0.08);font-size:18px;">
         <b>יעד החיסכון שלך:</b> ₪{savings_goal:,.0f}
         &nbsp;&nbsp; | &nbsp;&nbsp;
         <b>תחזית חיסכון בסוף המחזור:</b> ₪{projected_saving:,.0f}
@@ -221,67 +218,118 @@ else:
     st.error(msg)
 
 st.divider()
-st.subheader("הוצאות לפי קטגוריה")
+st.subheader("📊 הוצאות לפי קטגוריה")
+
 if len(consumer):
-    cats = consumer.groupby("קטגוריה", as_index=False)["סכום"].sum().sort_values("סכום", ascending=True)
-
-    # גרף אופקי מותאם לעברית:
-    # מסתירים את שמות הציר ומציגים שם קטגוריה + סכום על כל שורה.
-    import altair as alt
-
-    chart_data = cats.copy()
-    chart_data["תווית"] = chart_data.apply(
-        lambda r: f'{r["קטגוריה"]}  —  ₪{r["סכום"]:,.0f}', axis=1
+    # Descending order, with largest category first.
+    cats = (
+        consumer.groupby("קטגוריה", as_index=False)["סכום"]
+        .sum()
+        .sort_values("סכום", ascending=False)
+        .reset_index(drop=True)
     )
+    total = float(cats["סכום"].sum())
+    cats["אחוז"] = (cats["סכום"] / total * 100) if total else 0
+    cats["תווית סכום"] = cats["סכום"].map(lambda x: f"₪{x:,.0f}")
+    order = cats["קטגוריה"].tolist()
 
-    max_amount = float(chart_data["סכום"].max()) if len(chart_data) else 0
-    chart_data["מיקום תווית"] = chart_data["סכום"] + max(max_amount * 0.025, 20)
+    color_range = [CATEGORY_COLORS.get(cat, "#7F8C8D") for cat in order]
 
-    bars = alt.Chart(chart_data).mark_bar(
-        cornerRadiusEnd=5,
-        size=25
+    # Labels are deliberately kept OUTSIDE the bars. This avoids Hebrew/RTL
+    # text colliding with short bars and keeps every category readable.
+    category_labels = alt.Chart(cats).mark_text(
+        align="right",
+        baseline="middle",
+        fontSize=17,
+        fontWeight="bold",
+        color="#202124",
+    ).encode(
+        y=alt.Y(
+            "קטגוריה:N",
+            sort=order,
+            axis=None,
+            scale=alt.Scale(paddingInner=0.35, paddingOuter=0.2),
+        ),
+        x=alt.value(210),
+        text=alt.Text("קטגוריה:N"),
+    ).properties(width=220)
+
+    bars = alt.Chart(cats).mark_bar(
+        cornerRadiusEnd=9,
+        height=30,
     ).encode(
         x=alt.X(
             "סכום:Q",
             title="סכום בש״ח",
-            scale=alt.Scale(domain=[0, max_amount * 1.38 if max_amount else 1])
+            axis=alt.Axis(format=",.0f", labelFontSize=13, titleFontSize=14, grid=True),
         ),
         y=alt.Y(
             "קטגוריה:N",
-            sort=alt.EncodingSortField(field="סכום", order="descending"),
+            sort=order,
             axis=None,
-            title=None
+            scale=alt.Scale(paddingInner=0.35, paddingOuter=0.2),
+        ),
+        color=alt.Color(
+            "קטגוריה:N",
+            scale=alt.Scale(domain=order, range=color_range),
+            legend=None,
         ),
         tooltip=[
             alt.Tooltip("קטגוריה:N", title="קטגוריה"),
             alt.Tooltip("סכום:Q", title="סכום", format=",.2f"),
+            alt.Tooltip("אחוז:Q", title="אחוז מההוצאות", format=".1f"),
         ],
-    )
+    ).properties(width=560)
 
-    labels = alt.Chart(chart_data).mark_text(
-        align="left",
+    # Amounts are in their own fixed-width column, so even tiny bars are clear.
+    amount_labels = alt.Chart(cats).mark_text(
+        align="right",
         baseline="middle",
-        dx=4,
-        fontSize=15
+        fontSize=17,
+        fontWeight="bold",
+        color="#202124",
     ).encode(
-        x=alt.X("מיקום תווית:Q"),
         y=alt.Y(
             "קטגוריה:N",
-            sort=alt.EncodingSortField(field="סכום", order="descending")
+            sort=order,
+            axis=None,
+            scale=alt.Scale(paddingInner=0.35, paddingOuter=0.2),
         ),
-        text=alt.Text("תווית:N")
-    )
+        x=alt.value(125),
+        text=alt.Text("תווית סכום:N"),
+        tooltip=[
+            alt.Tooltip("קטגוריה:N", title="קטגוריה"),
+            alt.Tooltip("סכום:Q", title="סכום", format=",.2f"),
+        ],
+    ).properties(width=135)
 
-    chart = (bars + labels).properties(
-        height=max(320, len(chart_data) * 55)
-    ).configure_view(strokeWidth=0)
+    chart = alt.hconcat(
+        category_labels,
+        bars,
+        amount_labels,
+        spacing=12,
+    ).resolve_scale(
+        y="shared"
+    ).properties(
+        title=alt.TitleParams(
+            text="פירוט ההוצאות",
+            anchor="middle",
+            fontSize=20,
+            fontWeight="bold",
+        )
+    ).configure_view(
+        strokeWidth=0
+    ).configure_axis(
+        labelColor="#444",
+        titleColor="#333",
+    )
 
     st.altair_chart(chart, use_container_width=True)
 
-    total = cats["סכום"].sum()
-    summary = cats.sort_values("סכום", ascending=False).copy()
-    summary["אחוז מהוצאות האשראי"] = (summary["סכום"] / total * 100).round(1) if total else 0
+    summary = cats[["קטגוריה", "סכום", "אחוז"]].copy()
     summary["סכום"] = summary["סכום"].round(2)
+    summary["אחוז"] = summary["אחוז"].round(1)
+
     st.dataframe(
         summary,
         use_container_width=True,
@@ -289,9 +337,11 @@ if len(consumer):
         column_config={
             "קטגוריה": st.column_config.TextColumn("קטגוריה"),
             "סכום": st.column_config.NumberColumn("סכום", format="₪ %.2f"),
-            "אחוז מהוצאות האשראי": st.column_config.NumberColumn("אחוז מההוצאות", format="%.1f%%"),
+            "אחוז": st.column_config.NumberColumn("אחוז מההוצאות", format="%.1f%%"),
         },
     )
+else:
+    st.info("לא נמצאו הוצאות אשראי להצגה במחזור הנוכחי.")
 
 if round_savings:
     st.caption(f"'עגול לחיסכון' שזוהה במחזור: ₪{round_savings:,.2f}")
