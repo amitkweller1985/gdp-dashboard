@@ -1,14 +1,56 @@
 import streamlit as st
 import pandas as pd
 from datetime import date, timedelta
-import altair as alt
 
 st.set_page_config(page_title="התקציב שלי", page_icon="💰", layout="wide")
-st.markdown("""<style>
-html, body, [class*="css"] { direction: rtl; text-align: right; }
-[data-testid="stMetric"] { direction: rtl; }
-.block-container { max-width: 1100px; }
-</style>""", unsafe_allow_html=True)
+
+st.markdown("""
+<style>
+html, body, [class*="css"] {
+    direction: rtl;
+    text-align: right;
+}
+[data-testid="stMetric"] {
+    direction: rtl;
+}
+.block-container {
+    max-width: 1100px;
+}
+.expense-card {
+    background-color: rgba(120,120,120,0.07);
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    border-radius: 12px;
+    direction: rtl;
+}
+.expense-title {
+    font-size: 20px;
+    font-weight: 800;
+}
+.expense-amount {
+    font-size: 22px;
+    font-weight: 800;
+}
+.expense-percent {
+    font-size: 15px;
+    font-weight: 700;
+    opacity: 0.8;
+    margin-top: 4px;
+}
+.expense-track {
+    width: 100%;
+    height: 16px;
+    background-color: rgba(120,120,120,0.15);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-top: 10px;
+}
+.expense-fill {
+    height: 16px;
+    border-radius: 8px;
+}
+</style>
+""", unsafe_allow_html=True)
 
 DEFAULTS = {
     "income": 28500.0,
@@ -35,17 +77,17 @@ CATEGORIES = [
 
 CATEGORY_COLORS = {
     "מזון וסופר": "#2E86DE",
-    "מסעדות ואוכל בחוץ": "#FF8C42",
-    "רכב ודלק": "#16A085",
-    "חניה וכבישי אגרה": "#8E44AD",
-    "ילדים וגן": "#E056FD",
-    "בריאות ופארם": "#E74C3C",
-    "חשבונות ותקשורת": "#3498DB",
-    "קניות": "#F1C40F",
-    "בילויים": "#9B59B6",
-    "דיור/עירייה": "#795548",
-    "חיסכון": "#27AE60",
-    "אחר": "#7F8C8D",
+    "מסעדות ואוכל בחוץ": "#FF9F43",
+    "רכב ודלק": "#576574",
+    "חניה וכבישי אגרה": "#8395A7",
+    "ילדים וגן": "#EE5253",
+    "בריאות ופארם": "#10AC84",
+    "חשבונות ותקשורת": "#5F27CD",
+    "קניות": "#F368E0",
+    "בילויים": "#00D2D3",
+    "דיור/עירייה": "#8854D0",
+    "חיסכון": "#1DD1A1",
+    "אחר": "#778CA3",
 }
 
 def cycle_bounds(today, d=10):
@@ -85,8 +127,12 @@ def parse_file(upload):
     merchant = find_col(df.columns, "בית עסק")
     txdate = find_col(df.columns, "תאריך עסקה")
     amount = find_col(df.columns, "סכום החיוב")
+
     if not all([merchant, txdate, amount]):
-        raise ValueError("לא זוהה פורמט הקובץ. נדרשות העמודות: בית עסק, תאריך עסקה, סכום החיוב.")
+        raise ValueError(
+            "לא זוהה פורמט הקובץ. נדרשות העמודות: בית עסק, תאריך עסקה, סכום החיוב."
+        )
+
     out = pd.DataFrame()
     out["בית עסק"] = df[merchant].astype(str).str.strip()
     out["תאריך"] = pd.to_datetime(df[txdate], errors="coerce", dayfirst=True)
@@ -98,14 +144,24 @@ def parse_file(upload):
     return out
 
 st.title("💰 התקציב שלי")
-st.caption("מעלים את קובץ האשראי, מתקנים קטגוריות במידת הצורך ומקבלים תמונת מצב למחזור 10–10.")
+st.caption(
+    "מעלים את קובץ האשראי, מתקנים קטגוריות במידת הצורך ומקבלים תמונת מצב למחזור 10–10."
+)
 
 with st.sidebar:
     st.header("הגדרות חודשיות")
-    income = st.number_input("הכנסות", min_value=0.0, value=DEFAULTS["income"], step=100.0)
-    mortgage = st.number_input("משכנתא", min_value=0.0, value=DEFAULTS["mortgage"], step=100.0)
-    kindergarten = st.number_input("גן / צ׳קים", min_value=0.0, value=DEFAULTS["kindergarten"], step=100.0)
-    savings_goal = st.number_input("יעד חיסכון", min_value=0.0, value=DEFAULTS["savings_goal"], step=100.0)
+    income = st.number_input(
+        "הכנסות", min_value=0.0, value=DEFAULTS["income"], step=100.0
+    )
+    mortgage = st.number_input(
+        "משכנתא", min_value=0.0, value=DEFAULTS["mortgage"], step=100.0
+    )
+    kindergarten = st.number_input(
+        "גן / צ׳קים", min_value=0.0, value=DEFAULTS["kindergarten"], step=100.0
+    )
+    savings_goal = st.number_input(
+        "יעד חיסכון", min_value=0.0, value=DEFAULTS["savings_goal"], step=100.0
+    )
     st.info("המחזור מוגדר מה־10 בחודש עד ה־9 בחודש הבא.")
 
 today = date.today()
@@ -116,9 +172,15 @@ st.markdown(
     f"<h3 dir='rtl'>מחזור נוכחי: <span dir='ltr'>{start:%d.%m.%Y} ← {end:%d.%m.%Y}</span></h3>",
     unsafe_allow_html=True,
 )
-st.write(f"מסגרת לשאר ההוצאות אחרי משכנתא, גן ויעד חיסכון: **₪{available:,.0f}**")
+st.write(
+    f"מסגרת לשאר ההוצאות אחרי משכנתא, גן ויעד חיסכון: **₪{available:,.0f}**"
+)
 
-upload = st.file_uploader("העלה את קובץ האשראי העדכני", type=["xlsx", "xls"])
+upload = st.file_uploader(
+    "העלה את קובץ האשראי העדכני",
+    type=["xlsx", "xls"],
+)
+
 if upload is None:
     st.info("בחר קובץ Excel כדי להתחיל.")
     st.stop()
@@ -129,11 +191,17 @@ except Exception as e:
     st.error(str(e))
     st.stop()
 
-cyc = df[(df["תאריך"].dt.date >= start) & (df["תאריך"].dt.date <= end)].copy()
+cyc = df[
+    (df["תאריך"].dt.date >= start)
+    & (df["תאריך"].dt.date <= end)
+].copy()
 
 st.divider()
 st.subheader("✏️ תיקון קטגוריות")
-st.caption("אפשר ללחוץ על הקטגוריה בכל שורה ולבחור קטגוריה אחרת. כל החישובים והגרפים למטה יתעדכנו מיד.")
+st.caption(
+    "לחץ על הקטגוריה בכל שורה ובחר קטגוריה אחרת. "
+    "החישובים ופירוט ההוצאות יתעדכנו מיד."
+)
 
 if len(cyc):
     edit_df = cyc[["תאריך", "בית עסק", "סכום", "קטגוריה"]].copy()
@@ -145,23 +213,37 @@ if len(cyc):
         hide_index=True,
         disabled=["תאריך", "בית עסק", "סכום"],
         column_config={
-            "תאריך": st.column_config.DateColumn("תאריך", format="DD/MM/YYYY"),
+            "תאריך": st.column_config.DateColumn(
+                "תאריך",
+                format="DD/MM/YYYY",
+            ),
             "בית עסק": st.column_config.TextColumn("בית עסק"),
-            "סכום": st.column_config.NumberColumn("סכום", format="₪ %.2f"),
-            "קטגוריה": st.column_config.SelectboxColumn("קטגוריה", options=CATEGORIES, required=True),
+            "סכום": st.column_config.NumberColumn(
+                "סכום",
+                format="₪ %.2f",
+            ),
+            "קטגוריה": st.column_config.SelectboxColumn(
+                "קטגוריה",
+                options=CATEGORIES,
+                required=True,
+            ),
         },
         key="category_editor",
     )
+
     cyc["קטגוריה"] = edited["קטגוריה"].values
 else:
     st.info("לא נמצאו עסקאות במחזור הנוכחי.")
 
 consumer = cyc[cyc["קטגוריה"] != "חיסכון"].copy()
 round_savings = cyc[cyc["קטגוריה"] == "חיסכון"]["סכום"].sum()
+
 spend = consumer["סכום"].sum()
 remaining = available - spend
+
 days_left = max((end - today).days + 1, 1)
 daily = max(remaining / days_left, 0)
+
 elapsed = max((today - start).days + 1, 1)
 pace = spend / elapsed
 projected_spend = spend + pace * max((end - today).days, 0)
@@ -169,47 +251,72 @@ projected_saving = income - mortgage - kindergarten - projected_spend
 
 if remaining < 0:
     status = "🔴 אדום"
-    msg = f"⛔ עצור הוצאות לא חיוניות. חרגת ממסגרת ההוצאות ב־₪{abs(remaining):,.0f}."
+    msg = (
+        f"⛔ עצור הוצאות לא חיוניות. "
+        f"חרגת ממסגרת ההוצאות ב־₪{abs(remaining):,.0f}."
+    )
 elif projected_saving >= savings_goal:
     status = "🟢 ירוק"
-    msg = f"✅ אתה במסלול טוב. ניתן להוציא עד כ־₪{daily:,.0f} ליום ועדיין לשמור על יעד החיסכון."
+    msg = (
+        f"✅ אתה במסלול טוב. ניתן להוציא עד כ־₪{daily:,.0f} ליום "
+        "ועדיין לשמור על יעד החיסכון."
+    )
 elif projected_saving >= 0:
     status = "🟠 כתום"
-    msg = f"⚠️ כדאי להאט. המסגרת שנותרה היא כ־₪{daily:,.0f} ליום, ויעד החיסכון עלול להיפגע."
+    msg = (
+        f"⚠️ כדאי להאט. המסגרת שנותרה היא כ־₪{daily:,.0f} ליום, "
+        "ויעד החיסכון עלול להיפגע."
+    )
 else:
     status = "🔴 אדום"
     msg = "⛔ עצור כרגע הוצאות לא חיוניות. בקצב הנוכחי צפויה חריגה מהתקציב."
 
 st.divider()
-st.subheader("📊 תמונת מצב עד ה־10")
+st.subheader("📊 תמונת מצב")
 
 days_remaining = max((end - today).days + 1, 0)
-today_budget = max(daily, 0)
 
 c1, c2, c3, c4 = st.columns(4)
-c1.metric("💳 הוצאת עד עכשיו", f"₪{spend:,.0f}")
+
+c1.metric(
+    "💳 הוצאות עד עכשיו",
+    f"₪{spend:,.0f}",
+)
 c2.metric(
     "💰 נשאר עד סוף המחזור",
     f"₪{max(remaining, 0):,.0f}",
     delta=f"חריגה ₪{abs(remaining):,.0f}" if remaining < 0 else None,
     delta_color="inverse",
 )
-c3.metric("📅 ימים שנותרו", f"{days_remaining}")
-c4.metric("🎯 מותר להוציא היום", f"₪{today_budget:,.0f}")
+c3.metric(
+    "📅 ימים שנותרו",
+    f"{days_remaining}",
+)
+c4.metric(
+    "🎯 מותר להוציא היום",
+    f"₪{max(daily, 0):,.0f}",
+)
 
 st.markdown(
     f"""
-    <div style="padding:18px;border-radius:14px;margin-top:12px;margin-bottom:14px;
-        background:rgba(120,120,120,0.08);font-size:18px;">
-        <b>יעד החיסכון שלך:</b> ₪{savings_goal:,.0f}
+    <div style="
+        padding:18px;
+        border-radius:14px;
+        margin-top:12px;
+        margin-bottom:14px;
+        background:rgba(120,120,120,0.08);
+        font-size:18px;
+        font-weight:700;">
+        יעד החיסכון: ₪{savings_goal:,.0f}
         &nbsp;&nbsp; | &nbsp;&nbsp;
-        <b>תחזית חיסכון בסוף המחזור:</b> ₪{projected_saving:,.0f}
+        תחזית חיסכון בסוף המחזור: ₪{projected_saving:,.0f}
     </div>
     """,
     unsafe_allow_html=True,
 )
 
 st.header(status)
+
 if status.startswith("🟢"):
     st.success(msg)
 elif status.startswith("🟠"):
@@ -221,129 +328,77 @@ st.divider()
 st.subheader("📊 הוצאות לפי קטגוריה")
 
 if len(consumer):
-    # Descending order, with largest category first.
     cats = (
         consumer.groupby("קטגוריה", as_index=False)["סכום"]
         .sum()
         .sort_values("סכום", ascending=False)
-        .reset_index(drop=True)
     )
+
     total = float(cats["סכום"].sum())
-    cats["אחוז"] = (cats["סכום"] / total * 100) if total else 0
-    cats["תווית סכום"] = cats["סכום"].map(lambda x: f"₪{x:,.0f}")
-    order = cats["קטגוריה"].tolist()
+    max_amount = float(cats["סכום"].max())
 
-    color_range = [CATEGORY_COLORS.get(cat, "#7F8C8D") for cat in order]
+    for _, row in cats.iterrows():
+        category = str(row["קטגוריה"])
+        amount = float(row["סכום"])
+        percent = (amount / total * 100) if total else 0
+        bar_percent = (amount / max_amount * 100) if max_amount else 0
+        color = CATEGORY_COLORS.get(category, "#778CA3")
 
-    # Labels are deliberately kept OUTSIDE the bars. This avoids Hebrew/RTL
-    # text colliding with short bars and keeps every category readable.
-    category_labels = alt.Chart(cats).mark_text(
-        align="right",
-        baseline="middle",
-        fontSize=17,
-        fontWeight="bold",
-        color="#202124",
-    ).encode(
-        y=alt.Y(
-            "קטגוריה:N",
-            sort=order,
-            axis=None,
-            scale=alt.Scale(paddingInner=0.35, paddingOuter=0.2),
-        ),
-        x=alt.value(210),
-        text=alt.Text("קטגוריה:N"),
-    ).properties(width=220)
+        st.markdown(
+            f"""
+            <div class="expense-card">
+                <div style="
+                    display:flex;
+                    justify-content:space-between;
+                    align-items:center;
+                    gap:20px;">
+                    <div class="expense-title">{category}</div>
+                    <div class="expense-amount">₪{amount:,.0f}</div>
+                </div>
 
-    bars = alt.Chart(cats).mark_bar(
-        cornerRadiusEnd=9,
-        height=30,
-    ).encode(
-        x=alt.X(
-            "סכום:Q",
-            title="סכום בש״ח",
-            axis=alt.Axis(format=",.0f", labelFontSize=13, titleFontSize=14, grid=True),
-        ),
-        y=alt.Y(
-            "קטגוריה:N",
-            sort=order,
-            axis=None,
-            scale=alt.Scale(paddingInner=0.35, paddingOuter=0.2),
-        ),
-        color=alt.Color(
-            "קטגוריה:N",
-            scale=alt.Scale(domain=order, range=color_range),
-            legend=None,
-        ),
-        tooltip=[
-            alt.Tooltip("קטגוריה:N", title="קטגוריה"),
-            alt.Tooltip("סכום:Q", title="סכום", format=",.2f"),
-            alt.Tooltip("אחוז:Q", title="אחוז מההוצאות", format=".1f"),
-        ],
-    ).properties(width=560)
+                <div class="expense-percent">
+                    {percent:.1f}% מהוצאות האשראי
+                </div>
 
-    # Amounts are in their own fixed-width column, so even tiny bars are clear.
-    amount_labels = alt.Chart(cats).mark_text(
-        align="right",
-        baseline="middle",
-        fontSize=17,
-        fontWeight="bold",
-        color="#202124",
-    ).encode(
-        y=alt.Y(
-            "קטגוריה:N",
-            sort=order,
-            axis=None,
-            scale=alt.Scale(paddingInner=0.35, paddingOuter=0.2),
-        ),
-        x=alt.value(125),
-        text=alt.Text("תווית סכום:N"),
-        tooltip=[
-            alt.Tooltip("קטגוריה:N", title="קטגוריה"),
-            alt.Tooltip("סכום:Q", title="סכום", format=",.2f"),
-        ],
-    ).properties(width=135)
-
-    chart = alt.hconcat(
-        category_labels,
-        bars,
-        amount_labels,
-        spacing=12,
-    ).resolve_scale(
-        y="shared"
-    ).properties(
-        title=alt.TitleParams(
-            text="פירוט ההוצאות",
-            anchor="middle",
-            fontSize=20,
-            fontWeight="bold",
+                <div class="expense-track">
+                    <div class="expense-fill"
+                         style="width:{bar_percent:.1f}%; background-color:{color};">
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
-    ).configure_view(
-        strokeWidth=0
-    ).configure_axis(
-        labelColor="#444",
-        titleColor="#333",
-    )
 
-    st.altair_chart(chart, use_container_width=True)
+    st.subheader("פירוט עסקאות")
+    view = consumer[
+        ["תאריך", "בית עסק", "סכום", "קטגוריה"]
+    ].sort_values("תאריך", ascending=False).copy()
 
-    summary = cats[["קטגוריה", "סכום", "אחוז"]].copy()
-    summary["סכום"] = summary["סכום"].round(2)
-    summary["אחוז"] = summary["אחוז"].round(1)
+    view["תאריך"] = view["תאריך"].dt.strftime("%d/%m/%Y")
 
     st.dataframe(
-        summary,
+        view,
         use_container_width=True,
         hide_index=True,
         column_config={
+            "בית עסק": st.column_config.TextColumn("בית עסק"),
+            "סכום": st.column_config.NumberColumn(
+                "סכום",
+                format="₪ %.2f",
+            ),
             "קטגוריה": st.column_config.TextColumn("קטגוריה"),
-            "סכום": st.column_config.NumberColumn("סכום", format="₪ %.2f"),
-            "אחוז": st.column_config.NumberColumn("אחוז מההוצאות", format="%.1f%%"),
         },
     )
 else:
-    st.info("לא נמצאו הוצאות אשראי להצגה במחזור הנוכחי.")
+    st.info("לא נמצאו הוצאות במחזור הנוכחי.")
 
 if round_savings:
-    st.caption(f"'עגול לחיסכון' שזוהה במחזור: ₪{round_savings:,.2f}")
+    st.caption(
+        f"'עגול לחיסכון' שזוהה במחזור: ₪{round_savings:,.2f}"
+    )
 
-st.caption("הערה: שינוי קטגוריה במסך משפיע מיד על החישובים. בגרסה זו השינוי הידני נשמר במהלך העבודה הנוכחית; בהעלאה חדשה יבוצע שוב הסיווג האוטומטי.")
+st.caption(
+    "הערה: שינוי קטגוריה במסך משפיע מיד על החישובים. "
+    "בהעלאה חדשה יבוצע שוב הסיווג האוטומטי."
+)
