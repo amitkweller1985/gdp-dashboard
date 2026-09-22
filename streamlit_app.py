@@ -16,7 +16,15 @@ st.markdown("""
     padding-top: 1.5rem;
 }
 
-/* Hebrew content alignment only — no forced layout direction */
+/* במחשב: מחזירים את פריסת ה-RTL המקורית, כולל הסרגל בצד ימין.
+   בטלפון לא כופים RTL על מבנה Streamlit כדי למנוע שבירת טקסט. */
+@media (min-width: 769px) {
+    html, body, [data-testid="stAppViewContainer"] {
+        direction: rtl;
+    }
+}
+
+/* יישור הטקסט בעברית */
 h1, h2, h3, p {
     text-align: right;
 }
