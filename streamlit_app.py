@@ -170,13 +170,49 @@ else:
     msg = "⛔ עצור כרגע הוצאות לא חיוניות. בקצב הנוכחי צפויה חריגה מהתקציב."
 
 st.divider()
-st.header(status)
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("נשאר להוציא", f"₪{max(remaining, 0):,.0f}", delta=f"חריגה ₪{abs(remaining):,.0f}" if remaining < 0 else None, delta_color="inverse")
-c2.metric("מותר ליום", f"₪{daily:,.0f}")
-c3.metric("הוצאות אשראי", f"₪{spend:,.0f}")
-c4.metric("תחזית חיסכון", f"₪{projected_saving:,.0f}")
+st.subheader("📊 תמונת מצב עד ה־10")
 
+days_remaining = max((end - today).days + 1, 0)
+today_budget = max(daily, 0)
+
+c1, c2, c3, c4 = st.columns(4)
+c1.metric(
+    "💳 הוצאת עד עכשיו",
+    f"₪{spend:,.0f}",
+)
+c2.metric(
+    "💰 נשאר עד סוף המחזור",
+    f"₪{max(remaining, 0):,.0f}",
+    delta=f"חריגה ₪{abs(remaining):,.0f}" if remaining < 0 else None,
+    delta_color="inverse",
+)
+c3.metric(
+    "📅 ימים שנותרו",
+    f"{days_remaining}",
+)
+c4.metric(
+    "🎯 מותר להוציא היום",
+    f"₪{today_budget:,.0f}",
+)
+
+st.markdown(
+    f"""
+    <div style="
+        padding:18px;
+        border-radius:14px;
+        margin-top:12px;
+        margin-bottom:14px;
+        background:rgba(120,120,120,0.08);
+        font-size:18px;">
+        <b>יעד החיסכון שלך:</b> ₪{savings_goal:,.0f}
+        &nbsp;&nbsp; | &nbsp;&nbsp;
+        <b>תחזית חיסכון בסוף המחזור:</b> ₪{projected_saving:,.0f}
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.header(status)
 if status.startswith("🟢"):
     st.success(msg)
 elif status.startswith("🟠"):
@@ -187,13 +223,35 @@ else:
 st.divider()
 st.subheader("הוצאות לפי קטגוריה")
 if len(consumer):
-    cats = consumer.groupby("קטגוריה", as_index=False)["סכום"].sum().sort_values("סכום", ascending=False)
-    st.bar_chart(cats.set_index("קטגוריה"))
+    cats = consumer.groupby("קטגוריה", as_index=False)["סכום"].sum().sort_values("סכום", ascending=True)
+
+    # גרף אופקי - נוח יותר לקריאת שמות קטגוריות בעברית
+    import altair as alt
+    chart = alt.Chart(cats).mark_bar(cornerRadiusEnd=4).encode(
+        x=alt.X("סכום:Q", title="סכום בש״ח"),
+        y=alt.Y("קטגוריה:N", sort="-x", title=None, axis=alt.Axis(labelLimit=220)),
+        tooltip=[
+            alt.Tooltip("קטגוריה:N", title="קטגוריה"),
+            alt.Tooltip("סכום:Q", title="סכום", format=",.0f"),
+        ],
+    ).properties(height=max(300, len(cats) * 48))
+
+    st.altair_chart(chart, use_container_width=True)
 
     total = cats["סכום"].sum()
-    summary = cats.copy()
+    summary = cats.sort_values("סכום", ascending=False).copy()
     summary["אחוז מהוצאות האשראי"] = (summary["סכום"] / total * 100).round(1) if total else 0
-    st.dataframe(summary, use_container_width=True, hide_index=True)
+    summary["סכום"] = summary["סכום"].round(2)
+    st.dataframe(
+        summary,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "קטגוריה": st.column_config.TextColumn("קטגוריה"),
+            "סכום": st.column_config.NumberColumn("סכום", format="₪ %.2f"),
+            "אחוז מהוצאות האשראי": st.column_config.NumberColumn("אחוז מההוצאות", format="%.1f%%"),
+        },
+    )
 
 if round_savings:
     st.caption(f"'עגול לחיסכון' שזוהה במחזור: ₪{round_savings:,.2f}")
