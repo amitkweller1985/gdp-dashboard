@@ -8,85 +8,52 @@ st.set_page_config(page_title="התקציב שלי", page_icon="💰", layout="w
 # The mobile rules prevent Hebrew text from collapsing into a one-letter-wide column.
 st.markdown("""
 <style>
-html, body {
-    direction: rtl;
-}
+/* Minimal responsive CSS.
+   IMPORTANT: do not apply direction:rtl to html/body/div/span or Streamlit's
+   internal flex containers; that caused the one-letter-wide vertical text. */
 .block-container {
     max-width: 1100px;
-    padding-top: 2rem;
+    padding-top: 1.5rem;
 }
-h1, h2, h3, p, .stMarkdown {
-    text-align: right;
-}
-[data-testid="stMetric"] {
-    direction: rtl;
+
+/* Hebrew content alignment only — no forced layout direction */
+h1, h2, h3, p {
     text-align: right;
 }
 
-/* Keep widgets usable */
-[data-testid="stFileUploader"] {
+/* The cycle line is our own element, so RTL is safe here */
+.cycle-box {
     direction: rtl;
-}
-[data-testid="stDataFrame"],
-[data-testid="stDataEditor"] {
-    direction: rtl;
+    text-align: right;
+    font-weight: 700;
+    margin: 1rem 0;
 }
 
-/* Mobile */
+/* Phone: only spacing and font sizes. Let Streamlit handle responsiveness. */
 @media (max-width: 768px) {
     .block-container {
-        max-width: 100% !important;
-        padding: 1rem 0.8rem 5rem !important;
+        max-width: 100%;
+        padding: 1rem 0.75rem 4rem;
     }
 
     h1 {
-        font-size: 2.25rem !important;
-        line-height: 1.15 !important;
-        white-space: normal !important;
-        overflow-wrap: normal !important;
-        word-break: normal !important;
-    }
-    h2 { font-size: 1.65rem !important; }
-    h3 { font-size: 1.3rem !important; }
-
-    p, li, label, .stMarkdown {
-        font-size: 1rem !important;
-        line-height: 1.55 !important;
-        word-break: normal !important;
-        overflow-wrap: normal !important;
+        font-size: 2.1rem !important;
+        line-height: 1.2 !important;
     }
 
-    /* Streamlit columns become full width on phones */
-    [data-testid="stHorizontalBlock"] {
-        flex-wrap: wrap !important;
-        gap: 0.6rem !important;
-    }
-    [data-testid="column"] {
-        min-width: 100% !important;
-        width: 100% !important;
-        flex: 1 1 100% !important;
+    h2 {
+        font-size: 1.55rem !important;
+        line-height: 1.25 !important;
     }
 
-    [data-testid="stMetric"] {
-        padding: 0.4rem 0 !important;
-    }
-
-    [data-testid="stMetricValue"] {
-        font-size: 1.65rem !important;
-    }
-
-    [data-testid="stFileUploader"] section {
-        padding: 0.8rem !important;
-    }
-
-    /* Prevent narrow RTL text fragments */
-    div, span {
-        word-break: normal;
+    h3 {
+        font-size: 1.25rem !important;
+        line-height: 1.3 !important;
     }
 
     .cycle-box {
-        font-size: 1.25rem !important;
-        line-height: 1.6 !important;
+        font-size: 1.15rem;
+        line-height: 1.6;
     }
 }
 </style>
@@ -96,6 +63,7 @@ DEFAULTS = {
     "income": 28500.0,
     "mortgage": 9800.0,
     "kindergarten": 4000.0,
+    "personal_training": 1200.0,
     "savings_goal": 2000.0,
     "cycle_day": 10,
 }
@@ -179,24 +147,30 @@ with st.sidebar:
     income = st.number_input("הכנסות", min_value=0.0, value=DEFAULTS["income"], step=100.0)
     mortgage = st.number_input("משכנתא", min_value=0.0, value=DEFAULTS["mortgage"], step=100.0)
     kindergarten = st.number_input("גן / צ׳קים", min_value=0.0, value=DEFAULTS["kindergarten"], step=100.0)
+    personal_training = st.number_input("אימונים אישיים", min_value=0.0, value=DEFAULTS["personal_training"], step=100.0)
     savings_goal = st.number_input("יעד חיסכון", min_value=0.0, value=DEFAULTS["savings_goal"], step=100.0)
     st.info("המחזור מוגדר מה־10 בחודש עד ה־9 בחודש הבא.")
 
 today = date.today()
 start, end = cycle_bounds(today, DEFAULTS["cycle_day"])
-available = income - mortgage - kindergarten - savings_goal
+available = income - mortgage - kindergarten - personal_training - savings_goal
 
 # A single responsive block instead of mixed RTL/LTR heading fragments.
 st.markdown(
     f"""
     <div class="cycle-box" dir="rtl" style="font-weight:700; margin:1rem 0;">
         מחזור נוכחי:
-        <span dir="ltr" style="white-space:nowrap;">{start:%d.%m.%Y} ← {end:%d.%m.%Y}</span>
+        <span style="white-space:nowrap;" dir="ltr">{start:%d.%m.%Y} – {end:%d.%m.%Y}</span>
     </div>
     """,
     unsafe_allow_html=True,
 )
-st.markdown(f"מסגרת לשאר ההוצאות אחרי משכנתא, גן ויעד חיסכון: **₪{available:,.0f}**")
+st.markdown(f"מסגרת לשאר ההוצאות אחרי משכנתא, גן, אימונים אישיים ויעד חיסכון: **₪{available:,.0f}**")
+
+st.markdown(
+    f"**הוצאות קבועות:** משכנתא ₪{mortgage:,.0f} · גן / צ׳קים ₪{kindergarten:,.0f} · "
+    f"אימונים אישיים ₪{personal_training:,.0f} · **סה״כ ₪{mortgage + kindergarten + personal_training:,.0f}**"
+)
 
 upload = st.file_uploader("העלה את קובץ האשראי העדכני", type=["xlsx", "xls"])
 if upload is None:
@@ -245,7 +219,7 @@ daily = max(remaining / days_left, 0)
 elapsed = max((today - start).days + 1, 1)
 pace = spend / elapsed
 projected_spend = spend + pace * max((end - today).days, 0)
-projected_saving = income - mortgage - kindergarten - projected_spend
+projected_saving = income - mortgage - kindergarten - personal_training - projected_spend
 
 if remaining < 0:
     status = "🔴 אדום"
