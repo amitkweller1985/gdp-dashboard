@@ -281,14 +281,43 @@ st.caption(
     "ההוצאות של אותו מחזור; מחזורים קודמים נשמרים בגיליון כהיסטוריה."
 )
 
+# כלי בדיקה פשוט לחיבור Google Sheets
+with st.expander("🔧 בדיקת חיבור ל-Google Sheets"):
+    if st.button("הפעל בדיקת חיבור", use_container_width=True):
+        try:
+            if "gcp_service_account" not in st.secrets:
+                st.error("❌ שלב 1: לא נמצא [gcp_service_account] ב-Streamlit Secrets.")
+            else:
+                st.success("✅ שלב 1: Secrets נמצאו.")
+                info = dict(st.secrets["gcp_service_account"])
+                required_keys = ["project_id", "private_key", "client_email", "token_uri"]
+                missing = [k for k in required_keys if not info.get(k)]
+                if missing:
+                    st.error("❌ חסרים ב-Secrets השדות: " + ", ".join(missing))
+                else:
+                    st.success("✅ שלב 2: השדות הדרושים נמצאו ב-Secrets.")
+                    scopes = [
+                        "https://www.googleapis.com/auth/spreadsheets",
+                        "https://www.googleapis.com/auth/drive",
+                    ]
+                    creds = Credentials.from_service_account_info(info, scopes=scopes)
+                    st.success("✅ שלב 3: פרטי Service Account נקראו בהצלחה.")
+                    client = gspread.authorize(creds)
+                    st.success("✅ שלב 4: ההתחברות ל-Google הצליחה.")
+                    test_sheet = client.open_by_key(SHEET_ID).sheet1
+                    st.success(f"✅ שלב 5: הגיליון נמצא ונפתח בהצלחה — {test_sheet.title}")
+                    st.info("🎉 החיבור תקין. אפשר להזין הוצאות במזומן.")
+        except Exception as e:
+            st.error("❌ הבדיקה נעצרה בשלב שבו קיימת הבעיה.")
+            st.code(f"{type(e).__name__}: {repr(str(e))}")
+
 try:
     cash_rows = load_cash_rows(start, end)
     sheets_ok = True
 except Exception as e:
     cash_rows = []
     sheets_ok = False
-    st.error("לא הצלחתי להתחבר ל-Google Sheets. בדוק את Secrets ואת שיתוף הגיליון.")
-    st.caption(f"פרטי שגיאה: {e}")
+    st.error("לא הצלחתי להתחבר ל-Google Sheets. פתח את 'בדיקת חיבור ל-Google Sheets' ולחץ על הכפתור.")
 
 if sheets_ok:
     with st.form("cash_expense_form", clear_on_submit=True):
