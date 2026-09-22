@@ -225,16 +225,56 @@ st.subheader("הוצאות לפי קטגוריה")
 if len(consumer):
     cats = consumer.groupby("קטגוריה", as_index=False)["סכום"].sum().sort_values("סכום", ascending=True)
 
-    # גרף אופקי - נוח יותר לקריאת שמות קטגוריות בעברית
+    # גרף אופקי מותאם לעברית:
+    # מסתירים את שמות הציר ומציגים שם קטגוריה + סכום על כל שורה.
     import altair as alt
-    chart = alt.Chart(cats).mark_bar(cornerRadiusEnd=4).encode(
-        x=alt.X("סכום:Q", title="סכום בש״ח"),
-        y=alt.Y("קטגוריה:N", sort="-x", title=None, axis=alt.Axis(labelLimit=220)),
+
+    chart_data = cats.copy()
+    chart_data["תווית"] = chart_data.apply(
+        lambda r: f'{r["קטגוריה"]}  —  ₪{r["סכום"]:,.0f}', axis=1
+    )
+
+    max_amount = float(chart_data["סכום"].max()) if len(chart_data) else 0
+    chart_data["מיקום תווית"] = chart_data["סכום"] + max(max_amount * 0.025, 20)
+
+    bars = alt.Chart(chart_data).mark_bar(
+        cornerRadiusEnd=5,
+        size=25
+    ).encode(
+        x=alt.X(
+            "סכום:Q",
+            title="סכום בש״ח",
+            scale=alt.Scale(domain=[0, max_amount * 1.38 if max_amount else 1])
+        ),
+        y=alt.Y(
+            "קטגוריה:N",
+            sort=alt.EncodingSortField(field="סכום", order="descending"),
+            axis=None,
+            title=None
+        ),
         tooltip=[
             alt.Tooltip("קטגוריה:N", title="קטגוריה"),
-            alt.Tooltip("סכום:Q", title="סכום", format=",.0f"),
+            alt.Tooltip("סכום:Q", title="סכום", format=",.2f"),
         ],
-    ).properties(height=max(300, len(cats) * 48))
+    )
+
+    labels = alt.Chart(chart_data).mark_text(
+        align="left",
+        baseline="middle",
+        dx=4,
+        fontSize=15
+    ).encode(
+        x=alt.X("מיקום תווית:Q"),
+        y=alt.Y(
+            "קטגוריה:N",
+            sort=alt.EncodingSortField(field="סכום", order="descending")
+        ),
+        text=alt.Text("תווית:N")
+    )
+
+    chart = (bars + labels).properties(
+        height=max(320, len(chart_data) * 55)
+    ).configure_view(strokeWidth=0)
 
     st.altair_chart(chart, use_container_width=True)
 
