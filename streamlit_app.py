@@ -167,8 +167,7 @@ c1.metric("💳 הוצאות כולל חיובים צפויים",f"₪{spend:,.0
 c2.metric("💰 נשאר עד סוף המחזור",f"₪{max(remaining,0):,.0f}",delta=f"חריגה ₪{abs(remaining):,.0f}" if remaining<0 else None,delta_color="inverse")
 c3.metric("📅 ימים שנותרו",f"{days_remaining}")
 c4.metric("🎯 מותר להוציא היום",f"₪{max(daily,0):,.0f}")
-st.markdown(f"**יעד חיסכון:** ₪{savings_goal:,.0f}  
-**תחזית חיסכון בסוף המחזור:** ₪{projected_saving:,.0f}")
+st.markdown(f"**יעד חיסכון:** ₪{savings_goal:,.0f}  \n**תחזית חיסכון בסוף המחזור:** ₪{projected_saving:,.0f}")
 st.header(status)
 if status.startswith("🟢"): st.success(msg)
 elif status.startswith("🟠"): st.warning(msg)
