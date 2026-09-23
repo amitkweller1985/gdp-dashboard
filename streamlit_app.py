@@ -72,6 +72,7 @@ DEFAULTS = {
     "mortgage": 9800.0,
     "kindergarten": 4000.0,
     "personal_training": 1200.0,
+    "cleaner": 800.0,
     "savings_goal": 2000.0,
     "cycle_day": 10,
 }
@@ -156,12 +157,14 @@ with st.sidebar:
     mortgage = st.number_input("משכנתא", min_value=0.0, value=DEFAULTS["mortgage"], step=100.0)
     kindergarten = st.number_input("גן / צ׳קים", min_value=0.0, value=DEFAULTS["kindergarten"], step=100.0)
     personal_training = st.number_input("אימונים אישיים", min_value=0.0, value=DEFAULTS["personal_training"], step=100.0)
+    cleaner = st.number_input("מנקה", min_value=0.0, value=DEFAULTS["cleaner"], step=100.0)
+    cash_spend = st.number_input("💵 הוצאות מזומן במחזור", min_value=0.0, value=0.0, step=50.0, help="הכנס כאן את סך כל הוצאות המזומן המצטברות במחזור הנוכחי.")
     savings_goal = st.number_input("יעד חיסכון", min_value=0.0, value=DEFAULTS["savings_goal"], step=100.0)
     st.info("המחזור מוגדר מה־10 בחודש עד ה־9 בחודש הבא.")
 
 today = date.today()
 start, end = cycle_bounds(today, DEFAULTS["cycle_day"])
-available = income - mortgage - kindergarten - personal_training - savings_goal
+available = income - mortgage - kindergarten - personal_training - cleaner - savings_goal
 
 # A single responsive block instead of mixed RTL/LTR heading fragments.
 st.markdown(
@@ -173,11 +176,11 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-st.markdown(f"מסגרת לשאר ההוצאות אחרי משכנתא, גן, אימונים אישיים ויעד חיסכון: **₪{available:,.0f}**")
+st.markdown(f"מסגרת לשאר ההוצאות אחרי משכנתא, גן, אימונים אישיים, מנקה ויעד חיסכון: **₪{available:,.0f}**")
 
 st.markdown(
     f"**הוצאות קבועות:** משכנתא ₪{mortgage:,.0f} · גן / צ׳קים ₪{kindergarten:,.0f} · "
-    f"אימונים אישיים ₪{personal_training:,.0f} · **סה״כ ₪{mortgage + kindergarten + personal_training:,.0f}**"
+    f"אימונים אישיים ₪{personal_training:,.0f} · מנקה ₪{cleaner:,.0f} · **סה״כ ₪{mortgage + kindergarten + personal_training + cleaner:,.0f}**"
 )
 
 upload = st.file_uploader("העלה את קובץ האשראי העדכני", type=["xlsx", "xls"])
@@ -220,14 +223,15 @@ else:
 
 consumer = cyc[cyc["קטגוריה"] != "חיסכון"].copy()
 round_savings = cyc[cyc["קטגוריה"] == "חיסכון"]["סכום"].sum()
-spend = consumer["סכום"].sum()
+credit_spend = consumer["סכום"].sum()
+spend = credit_spend + cash_spend
 remaining = available - spend
 days_left = max((end - today).days + 1, 1)
 daily = max(remaining / days_left, 0)
 elapsed = max((today - start).days + 1, 1)
 pace = spend / elapsed
 projected_spend = spend + pace * max((end - today).days, 0)
-projected_saving = income - mortgage - kindergarten - personal_training - projected_spend
+projected_saving = income - mortgage - kindergarten - personal_training - cleaner - projected_spend
 
 if remaining < 0:
     status = "🔴 אדום"
@@ -244,12 +248,13 @@ else:
 
 st.divider()
 st.subheader("📊 תמונת מצב")
+st.caption(f"אשראי: ₪{credit_spend:,.0f} · מזומן שהוזן ידנית: ₪{cash_spend:,.0f}")
 
 days_remaining = max((end - today).days + 1, 0)
 
 # Native Streamlit columns: CSS stacks them on mobile.
 c1, c2, c3, c4 = st.columns(4)
-c1.metric("💳 הוצאות עד עכשיו", f"₪{spend:,.0f}")
+c1.metric("💳 הוצאות עד עכשיו (אשראי + מזומן)", f"₪{spend:,.0f}")
 c2.metric(
     "💰 נשאר עד סוף המחזור",
     f"₪{max(remaining, 0):,.0f}",
@@ -282,7 +287,7 @@ if len(consumer):
     # Simple, robust mobile presentation. No custom HTML chart and no RTL axis problems.
     max_amount = cats["סכום"].max() if len(cats) else 1
     for _, row in cats.iterrows():
-        pct = (row["סכום"] / spend * 100) if spend else 0
+        pct = (row["סכום"] / credit_spend * 100) if credit_spend else 0
         st.markdown(f"**{row['קטגוריה']}** — ₪{row['סכום']:,.0f} ({pct:.1f}%)")
         st.progress(min(float(row["סכום"] / max_amount), 1.0))
 
@@ -306,4 +311,4 @@ else:
 if round_savings:
     st.caption(f"'עגול לחיסכון' שזוהה במחזור: ₪{round_savings:,.2f}")
 
-st.caption("שינוי קטגוריה במסך משפיע מיד על החישובים. בהעלאת קובץ חדש יבוצע שוב הסיווג האוטומטי.")
+st.caption("המנקה מוגדרת כהוצאה חודשית קבועה של ₪800. הוצאות המזומן מוזנות כסכום מצטבר אחד ונכללות אוטומטית בחישובי התקציב.")
